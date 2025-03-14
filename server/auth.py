@@ -105,6 +105,12 @@ def logout_user():
     jwt = get_jwt()
     jti = jwt['jti']
     token_type = jwt['type']
+    
+    # Get the user_id from the JWT
+    user_id = jwt.get("sub")  # Ensure "sub" is included when creating the JWT
+    
+    if not user_id:
+        return jsonify({"message": "User ID missing from token"}), 400
 
     # Check if the token is already in the blocklist
     existing_token = TokenBlocklist.query.filter_by(jti=jti).first()
@@ -112,11 +118,12 @@ def logout_user():
         return jsonify({"message": f"{token_type} token already revoked"}), 400
 
     # Add the token to the blocklist
-    token_blocklist = TokenBlocklist(jti=jti)
+    token_blocklist = TokenBlocklist(jti=jti, user_id=user_id)
     db.session.add(token_blocklist)
     db.session.commit()
 
     return jsonify({"message": f"{token_type} token revoked successfully"}), 200
+
 
 # Commenting out OTP-related email function
     # send_user_signup_mail(new_user)  # OTP email function can be commented out for now
