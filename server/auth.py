@@ -76,11 +76,10 @@ def login():
         refresh_token = create_refresh_token(identity=user.username)  
 
         return jsonify({
-          "message": "Logged in",
-          "tokens": {
+
+          
             "access": access_token,
             "refresh": refresh_token
-        }
     }), 200
 
 # Whoami Route

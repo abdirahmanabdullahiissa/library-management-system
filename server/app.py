@@ -46,7 +46,7 @@ db.init_app(app)
 migrate = Migrate(app,db)
 api=Api(app)
 bcrypt = Bcrypt(app)
-CORS(app) #connect frontend 
+CORS(app)#connect frontend 
 jwt = JWTManager()
 jwt.init_app(app)
 # mail = Mail(app)
@@ -57,11 +57,15 @@ app.register_blueprint(user_bp, url_prefix='/user')
 
 
 #additional claims
-@jwt.additional_claims_loader
 def make_additional_claims(identity):
-    if identity == 'abd':
+    if identity == "zino":
         return {"is_admin": True}
-    return{"is_admin": False}
+    return{"is_admin":False}
+
+@jwt.additional_claims_loader
+def add_claims_to_access_token(identity):
+    return make_additional_claims(identity)
+
 
          
 
@@ -93,7 +97,70 @@ def token_in_blocklist(jwt_header,jwt_data):
 # @app.errorhandler(NotFound)
 # def handle_not_found(e):
 #     return render_template('index.html', title='Homepage', message='Welcome to our website!')
+class UserResource(Resource):
+    
+    def get(self):
+        users = User.query.all()
+        
+        user_dict = [user.serialize() for user in users]
+        return jsonify(user_dict)
+    def post(self):
+        data = request.get_json()
+        username = data["username"]
+        email = data["email"]
+        password=data["password"]
 
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+          return {"error": "User already exists"}, 400
+        
+        new_data = User(username=username, email=email ,password=password)
+        db.session.add(new_data)
+        db.session.commit()
+        response=make_response (jsonify(new_data.serialize()), 201)
+        return response
+
+api.add_resource(UserResource, '/users')
+
+class UserById(Resource):
+    def get(self, id):
+        user = User.query.get(id)
+        if not user:
+            return {'error': 'user not found'}, 404
+        return jsonify(user.serialize())
+    
+    @jwt_required()
+
+    def delete(self, id):
+        user = User.query.get(id)
+        claims = get_jwt()
+        if not claims.get("is_admin", False):
+            return {'message': 'Unauthorized: Admins only'}, 403
+        if not user:
+            return{'error':'user id cannot be found'}, 404
+        else:
+            db.session.delete(user)
+            db.session.commit()
+            response=make_response(jsonify({"message":"user deleted successfully"}), 200)
+            return response
+    def patch(self, id):
+        data = request.get_json()
+        username = data['username']
+        email = data['email']
+        password = data['password']
+        user = User.query.get(id)
+        if not user:
+            return {'error': 'user not found'}, 404
+        else:
+            user.username = username
+            user.email = email
+            user.password = password
+            db.session.commit()
+
+            response = make_response(jsonify(user.serialize()),200)
+            return response
+        
+api.add_resource(UserById, '/users/<int:id>')
 
 class BookResource(Resource):
     def get(self, book_id=None):
@@ -341,6 +408,10 @@ api.add_resource(BookResource, '/books', '/books/<int:book_id>')
   # For book operations
 api.add_resource(ReservationResource, '/reservations')  # For reservation operations
 api.add_resource(BorrowedBookResource, '/borrowed-books', '/borrowed-books/<int:book_id>')
+
+for rule in app.url_map.iter_rules():
+    print(rule)
+
 
 
 if __name__ == '__main__':

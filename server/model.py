@@ -71,6 +71,7 @@ class Book(db.Model, SerializerMixin):
             "id": self.id,
             "name": self.name,
             "author": self.author,
+            "isbn": self.isbn,
             "publication_year": self.publication_year,
             "copies_available": self.copies_available,
             "category":self.category
