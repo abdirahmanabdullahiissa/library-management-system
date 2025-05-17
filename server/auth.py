@@ -90,7 +90,7 @@ def whoami():
     return jsonify({"message": "token", "claims": claims})
 
 # Refresh Access Token
-@auth_bp.get('/refresh')
+@auth_bp.route('/refresh', methods=['GET', 'POST'])
 @jwt_required(refresh=True)
 def refresh_access():
     identity = get_jwt_identity()

@@ -25,16 +25,9 @@ export const menuItems=[
         title:"ReturnBook",
         path:"/returnbook",  
     },
-    {
-        title:"Analytics",
-        path:"/analytics",  
-    },
-    {
-        title:"Chart",
-        path:"/chart",  
-    },
+
     {
         title:"Logout",
-        path:"/logout",  
+        path:"",  
     }
 ]

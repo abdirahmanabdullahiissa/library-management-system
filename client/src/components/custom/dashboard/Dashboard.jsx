@@ -90,6 +90,7 @@ const [colDefs, setColDefs] = useState([
     { field: "isbn" },
     { field: "publication_year" },
     { field: "category" },
+    { field: "copies_available" },
     { field: "edit", maxWidth: 100, cellRenderer: (params) => <div className='py-2' onClick={() =>navigate(`/books/${params.data.id}`)}>
       <Pencil color='gray' className='cursor-pointer'/>
     </div>},

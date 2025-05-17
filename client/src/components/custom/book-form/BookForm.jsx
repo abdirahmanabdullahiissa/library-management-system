@@ -18,6 +18,7 @@ const formSchema = z.object({
   author: z.string().refine(v => v.trim() !== "", "This is a required field."),
   isbn: z.string().refine(v => v.trim() !== "", "This is a required field."),
   publication_year: z.coerce.number().int().positive({ message: "Year must be a positive number." }),
+  copies_available: z.coerce.number().int().min(0, "Copies available cannot be negative"),
   category: z.string().refine(v => v.trim() !== "", "This is a required field."),
 })
 
@@ -29,6 +30,7 @@ function BookForm({handleFormSubmit,book,isPending}) {
           author:book?.author || "",
           isbn:book?.isbn|| "",
           publication_year: book?.publication_year ||"",
+          copies_available: book?.copies_available ?? 0, 
           category:book?.category || "",
         },
       })
@@ -100,6 +102,19 @@ function BookForm({handleFormSubmit,book,isPending}) {
                         <FormLabel>Publication_year</FormLabel>
                         <FormControl>
                             <Input placeholder="Enter publicaion year" {...field} className="focus-visible:ring-transparent" />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <FormField
+                    control={form.control}
+                    name="copies_available"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>copies_available</FormLabel>
+                        <FormControl>
+                            <Input placeholder="Enter no of copies available " {...field} className="focus-visible:ring-transparent" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>

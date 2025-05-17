@@ -16,12 +16,13 @@ class User(db.Model,SerializerMixin):
     username = db.Column(db.String, nullable = False, unique = True)
     email = db.Column(db.String)
     hashed_password = db.Column(db.String, nullable = False)
+    role = db.Column(db.String(20), default='user')
     created_at = db.Column(db.DateTime,server_default=db.func.now())
     updated_at = db.Column(db.DateTime, onupdate=db.func.now())
 
     borrowed_books = db.relationship("BorrowedBook", back_populates="user", cascade="all, delete-orphan")
-    reservations = db.relationship("Reservation", back_populates="user", cascade="all, delete-orphan")
-    revoked_tokens = db.relationship('TokenBlocklist', back_populates='user', lazy=True)
+    revoked_tokens = db.relationship('TokenBlocklist', back_populates='user', lazy=True, cascade="all, delete-orphan")
+    return_books = db.relationship("ReturnBook", back_populates="user", cascade="all, delete-orphan")
 
     @validates('email')
     def validate_email(self, key, email):
@@ -64,7 +65,8 @@ class Book(db.Model, SerializerMixin):
     copies_available = db.Column(db.Integer, default=1, nullable=False)
 
     borrowed_books = db.relationship("BorrowedBook", back_populates="book", cascade="all, delete-orphan")
-    reservations = db.relationship("Reservation", back_populates="book", cascade="all, delete-orphan")
+    return_books = db.relationship("ReturnBook", back_populates="book", cascade="all, delete-orphan")
+
 
     def serialize(self):
         return {
@@ -77,49 +79,49 @@ class Book(db.Model, SerializerMixin):
             "category":self.category
             # "borrowed_books": [borrow.serialize() for borrow in self.borrowed_books]
         }
-class Reservation(db.Model, SerializerMixin):
-    __tablename__ = "reservations"
-    
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
-    book_id = db.Column(db.Integer, db.ForeignKey('books.id', ondelete="CASCADE"), nullable=False)
-    status = db.Column(db.String, default="pending", nullable=False)  # e.g "pending", "completed", "canceled"
-    reserved_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-
-    user = db.relationship("User", back_populates="reservations")
-    book = db.relationship("Book", back_populates="reservations")
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "user_id": self.user_id,
-            "book_id": self.book_id,
-            "status": self.status,
-            "reserved_at": self.reserved_at
-        }
 class BorrowedBook(db.Model, SerializerMixin):
     __tablename__ = "borrowed_books"
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
     book_id = db.Column(db.Integer, db.ForeignKey('books.id', ondelete="CASCADE"), nullable=False)
-    borrowed_at = db.Column(db.DateTime, default=datetime.utcnow)
-    due_date = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(days=14))  # Auto-set due date
-    returned_at = db.Column(db.DateTime, nullable=True)
+
 
     user = db.relationship("User", back_populates="borrowed_books")
     book = db.relationship("Book", back_populates="borrowed_books")
 
+    
+ 
     def serialize(self):
         return {
             "id": self.id,
             "book_id": self.book_id,
             "user_id": self.user_id,
-            "borrowed_at": self.borrowed_at,
-            "due_date": self.due_date,
-            "returned_at": self.returned_at
+            "book_name": self.book.name if self.book else None,
         }
+    
+class ReturnBook(db.Model, SerializerMixin):
+    __tablename__ = "return_books"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    book_id = db.Column(db.Integer, db.ForeignKey('books.id', ondelete="CASCADE"), nullable=False)
+
+
+    user = db.relationship("User", back_populates="return_books")
+    book = db.relationship("Book", back_populates="return_books")
+
+    
+ 
+    def serialize(self):
+        return {
+            "id": self.id,
+            "book_id": self.book_id,
+            "user_id": self.user_id,
+            "book_name": self.book.name if self.book else None,
+        }
+
 class TokenBlocklist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     jti = db.Column(db.String(), nullable=True)
@@ -129,6 +131,6 @@ class TokenBlocklist(db.Model):
     user = db.relationship('User', back_populates='revoked_tokens')
 
     def __repr__ (self):
-        return f"<tokem {self.jti}>"
+        return f"<token {self.jti}>"
 
 

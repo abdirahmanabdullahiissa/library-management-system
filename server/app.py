@@ -1,7 +1,7 @@
 import os
 
 from flask_jwt_extended import JWTManager,jwt_required,get_jwt_identity,get_jwt
-from model import User,db,BorrowedBook,Book,Reservation,TokenBlocklist
+from model import User,db,BorrowedBook,Book,TokenBlocklist,ReturnBook
 from flask_migrate import Migrate
 from flask import Flask,make_response,jsonify,request,render_template
 from flask_cors import CORS
@@ -58,10 +58,10 @@ app.register_blueprint(user_bp, url_prefix='/user')
 
 #additional claims
 def make_additional_claims(identity):
-    if identity == "zino":
+    user = User.query.filter_by(id=identity).first()
+    if user and user.role == "admin":
         return {"is_admin": True}
-    return{"is_admin":False}
-
+    return {"is_admin": False}
 @jwt.additional_claims_loader
 def add_claims_to_access_token(identity):
     return make_additional_claims(identity)
@@ -109,16 +109,18 @@ class UserResource(Resource):
         username = data["username"]
         email = data["email"]
         password=data["password"]
+        role=data["role"]
 
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
           return {"error": "User already exists"}, 400
         
-        new_data = User(username=username, email=email ,password=password)
+        new_data = User(username=username, email=email ,password=password, role=role)
         db.session.add(new_data)
         db.session.commit()
         response=make_response (jsonify(new_data.serialize()), 201)
         return response
+
 
 api.add_resource(UserResource, '/users')
 
@@ -143,18 +145,25 @@ class UserById(Resource):
             db.session.commit()
             response=make_response(jsonify({"message":"user deleted successfully"}), 200)
             return response
+    @jwt_required()
     def patch(self, id):
+
         data = request.get_json()
         username = data['username']
         email = data['email']
         password = data['password']
+        role=data["role"]
         user = User.query.get(id)
+        claims = get_jwt()
+        if not claims.get("is_admin", False):
+            return {'message': 'Unauthorized: Admins only'}, 403
         if not user:
             return {'error': 'user not found'}, 404
         else:
             user.username = username
             user.email = email
             user.password = password
+            user.role=role
             db.session.commit()
 
             response = make_response(jsonify(user.serialize()),200)
@@ -241,66 +250,6 @@ class BookResource(Resource):
         db.session.commit()
         return make_response(jsonify({'message': 'Book deleted successfully'}), 200)
     
-class ReservationResource(Resource):
-    @jwt_required()
-    def get(self):
-        """Fetch all reservations for the authenticated user."""
-        current_user = get_jwt_identity()
-        user = User.query.filter_by(username=current_user).first()
-
-        if not user:
-            return {'message': 'User not found'}, 404
-
-        reservations = Reservation.query.filter_by(user_id=user.id).all()
-        if not reservations:
-            return {'message': 'No reservations found'}, 404
-
-        return make_response(jsonify([r.serialize() for r in reservations]), 200)
-
-    @jwt_required()
-    def post(self):
-        """Reserve a book."""
-        data = request.get_json()
-        current_user = get_jwt_identity()
-        user = User.query.filter_by(username=current_user).first()
-
-        if not user:
-            return {'message': 'User not found'}, 404
-
-        book = Book.query.get(data.get("book_id"))
-        if not book:
-            return {'message': 'Book not found'}, 404
-
-        reservation = Reservation(
-            user_id=user.id,
-            book_id=book.id,
-            status="pending",
-            reserved_at=datetime.utcnow()
-        )
-
-        db.session.add(reservation)
-        db.session.commit()
-
-        return make_response(jsonify(reservation.serialize()), 201)
-
-    @jwt_required()
-    def patch(self):
-        """Cancel a reservation."""
-        data = request.get_json()
-        current_user = get_jwt_identity()
-        user = User.query.filter_by(username=current_user).first()
-
-        if not user:
-            return {'message': 'User not found'}, 404
-
-        reservation = Reservation.query.filter_by(user_id=user.id, book_id=data.get("book_id"), status="pending").first()
-        if not reservation:
-            return {'message': 'Reservation not found or already completed'}, 404
-
-        reservation.status = "canceled"
-        db.session.commit()
-
-        return make_response(jsonify({'message': 'Reservation canceled'}), 200)
 class BorrowedBookResource(Resource):
 
     @jwt_required()
@@ -347,66 +296,70 @@ class BorrowedBookResource(Resource):
         borrowed_book = BorrowedBook(
             user_id=user.id,
             book_id=book.id,
-            borrowed_at=datetime.utcnow(),
-            due_date=datetime.utcnow() + timedelta(days=14)
         )
 
         db.session.add(borrowed_book)
         db.session.commit()
 
         return make_response(jsonify(borrowed_book.serialize()), 201)
+    
 
+class ReturnBookResource(Resource):
     @jwt_required()
-    def patch(self, book_id):
-        """Return a borrowed book."""
+    def get(self, book_id=None):
+        
         current_user = get_jwt_identity()
         user = User.query.filter_by(username=current_user).first()
 
         if not user:
             return {'message': 'User not found'}, 404
 
-        borrowed_book = BorrowedBook.query.filter_by(user_id=user.id, book_id=book_id, returned_at=None).first()
-        if not borrowed_book:
-            return {'message': 'No borrowed book found to return'}, 404
+        if book_id:
+            returned_book = ReturnBook.query.filter_by(user_id=user.id, book_id=book_id).first()
+            if not returned_book:
+                return {'message': 'No returned book found with this ID'}, 404
+            return make_response(jsonify(returned_book.serialize()), 200)
 
-        borrowed_book.returned_at = datetime.utcnow()
+        returned_books = ReturnBook.query.filter_by(user_id=user.id).all()
+        if not returned_books:
+            return {'message': 'No borrowed books found'}, 404
 
-        # Increase book availability
-        book = Book.query.get(borrowed_book.book_id)
-        if book:
-            book.copies_available += 1
-
-        db.session.commit()
-
-        return make_response(jsonify({'message': 'Book returned successfully', 'borrowed_book': borrowed_book.serialize()}), 200)
+        return make_response(jsonify([r.serialize() for r in returned_books]), 200)
 
     @jwt_required()
-    def delete(self, book_id):
-        """Cancel a borrowed book before returning it."""
+    def post(self):
+        
+        data = request.get_json()
         current_user = get_jwt_identity()
         user = User.query.filter_by(username=current_user).first()
 
         if not user:
             return {'message': 'User not found'}, 404
 
-        borrowed_book = BorrowedBook.query.filter_by(user_id=user.id, book_id=book_id, returned_at=None).first()
-        if not borrowed_book:
-            return {'message': 'No active borrowed book found to delete'}, 404
+        book = Book.query.get(data.get("book_id"))
+        if not book:
+            return {'message': 'Book not found'}, 404
+        
+        if book.copies_available < 1:
+            return {'message': 'No copies available for returning'}, 400
 
-        # Restore book availability
-        book = Book.query.get(borrowed_book.book_id)
-        if book:
-            book.copies_available += 1
+        # Reduce book availability
+        book.copies_available -= 1
 
-        db.session.delete(borrowed_book)
+        returned_book = ReturnBook(
+            user_id=user.id,
+            book_id=book.id,
+        )
+
+        db.session.add(returned_book)
         db.session.commit()
 
-        return make_response(jsonify({'message': 'Borrowed book record deleted successfully'}), 200)
-
+        return make_response(jsonify(returned_book.serialize()), 201)
         # return make_response(jsonify({'message': 'Book returned successfully'}), 200)
 api.add_resource(BookResource, '/books', '/books/<int:book_id>')
   # For book operations
-api.add_resource(ReservationResource, '/reservations')  # For reservation operations
+api.add_resource(ReturnBookResource, '/return-books', '/return-books/<int:return_id>')
+
 api.add_resource(BorrowedBookResource, '/borrowed-books', '/borrowed-books/<int:book_id>')
 
 for rule in app.url_map.iter_rules():

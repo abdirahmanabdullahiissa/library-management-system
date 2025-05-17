@@ -22,14 +22,18 @@ function Login() {
         },
         body: JSON.stringify(data),
       }).then((res) => res.json()),
-    onSuccess: (data) => {
-      // Store access and refresh token in localStorage
-      localStorage.setItem('token', JSON.stringify(data.access));
-      localStorage.setItem('refreshToken', JSON.stringify(data.refresh));
-
-      // Navigate to the main page after successful login
-      navigate('/');
-    },
+      onSuccess: (data) => {
+        if (data.access && data.refresh) {
+          // Login successful
+          localStorage.setItem('token', JSON.stringify(data.access));
+          localStorage.setItem('refreshToken', JSON.stringify(data.refresh));
+          navigate('/');
+        } else {
+          // Login failed — show a toast
+          toast.error('❌ Invalid username or password. Please register first.');
+        }
+      },
+      
     onError: (error) => toast(`❌ ${error.message}`),
   });
 
@@ -131,6 +135,12 @@ function Login() {
                 >
                   Login
                 </button>
+                <p className="text-sm font-light text-gray-500 dark:text-gray-400 text-center">
+  Don’t have an account?{' '}
+  <a href="/register" className="font-medium text-primary hover:underline dark:text-primary-500">
+    Register here
+  </a>
+</p>
               </form>
             </div>
           </div>
